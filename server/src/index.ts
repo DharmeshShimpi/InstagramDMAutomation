@@ -250,3 +250,9 @@ const PORT = Number(process.env.PORT || 5174)
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`)
 })
+
+app.post('/api/stop', (_req: express.Request, res: express.Response) => {
+  state.running = false
+  state.nextSendAt = undefined
+  res.json({ ok: true })
+})

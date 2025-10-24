@@ -275,7 +275,22 @@ export default function App() {
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-gray-600 dark:text-gray-400">Imported: <span className="font-semibold text-gray-900 dark:text-gray-100">{total}</span></div>
-                <button disabled={running} onClick={onStart} className="inline-flex w-full items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">{running ? 'Running…' : 'Start Automation'}</button>
+                <div className="flex w-full items-center gap-2 sm:w-auto">
+                  {!running && (
+                    <button onClick={onStart} className="inline-flex w-full items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black sm:w-auto dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">Start Automation</button>
+                  )}
+                  {running && (
+                    <button onClick={async () => {
+                      try {
+                        const r = await fetch('/api/stop', { method: 'POST' })
+                        if (!r.ok) throw new Error('Failed to stop')
+                        setRunning(false)
+                      } catch (e: any) {
+                        alert(e?.message || 'Failed to stop job')
+                      }
+                    }} className="inline-flex w-full items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-red-700 sm:w-auto">Stop</button>
+                  )}
+                </div>
               </div>
             </section>
           </div>
