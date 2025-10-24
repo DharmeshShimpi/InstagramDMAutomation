@@ -43,6 +43,14 @@ export default function App() {
     '- CTA: Ask a simple yes/no or either/or question.\n' +
     'Output only the final message text.\n'
   )
+  const [promptSaved, setPromptSaved] = useState(false)
+  const savePrompt = useCallback(() => {
+    try {
+      localStorage.setItem('systemPrompt', systemPrompt)
+      setPromptSaved(true)
+      setTimeout(() => setPromptSaved(false), 1500)
+    } catch {}
+  }, [systemPrompt])
 
   // Usernames import
   const [usernames, setUsernames] = useState<string[]>([])
@@ -51,7 +59,8 @@ export default function App() {
   // Metrics
   const [sent, setSent] = useState(0)
   const [failed, setFailed] = useState(0)
-  const total = usernames.length
+  const [totalOverride, setTotalOverride] = useState<number | null>(null)
+  const total = totalOverride ?? usernames.length
   const remaining = Math.max(total - (sent + failed), 0)
   const percent = total ? Math.round(((sent + failed) / total) * 100) : 0
 
@@ -132,6 +141,7 @@ export default function App() {
     // reset metrics
     setSent(0)
     setFailed(0)
+    setTotalOverride(usernames.length)
     try {
       const res = await fetch('/api/start', {
         method: 'POST',
@@ -150,6 +160,14 @@ export default function App() {
         throw new Error(j.error || `Start failed (${res.status})`)
       }
       setRunning(true)
+      // persist immediately
+      localStorage.setItem('dmStatus', JSON.stringify({
+        running: true,
+        sent: 0,
+        failed: 0,
+        total: usernames.length,
+        secondsRemaining: 0,
+      }))
     } catch (e: any) {
       alert(e?.message || 'Failed to start job')
     }
@@ -168,6 +186,7 @@ export default function App() {
         setSent(j.sent || 0)
         setFailed(j.failed || 0)
         setSecondsRemaining(j.secondsRemaining || 0)
+        if (typeof j.total === 'number') setTotalOverride(j.total)
         // reflect current proxy from backend
         if (j.currentProxy) {
           // no local state needed beyond display; stored in j
@@ -175,6 +194,17 @@ export default function App() {
         if (!j.running) {
           setRunning(false)
         }
+        // persist snapshot
+        localStorage.setItem('dmStatus', JSON.stringify({
+          running: j.running,
+          sent: j.sent || 0,
+          failed: j.failed || 0,
+          total: typeof j.total === 'number' ? j.total : total,
+          secondsRemaining: j.secondsRemaining || 0,
+          currentProxy: j.currentProxy || '',
+          currentUsername: j.currentUsername || '',
+          updatedAt: Date.now(),
+        }))
       } catch {}
     }, 1000)
     return () => {
@@ -182,6 +212,35 @@ export default function App() {
       clearInterval(id)
     }
   }, [running])
+
+  // On mount, restore last known status and also fetch a fresh status once
+  useEffect(() => {
+    try {
+      const savedPrompt = localStorage.getItem('systemPrompt')
+      if (savedPrompt) setSystemPrompt(savedPrompt)
+      const cached = localStorage.getItem('dmStatus')
+      if (cached) {
+        const s = JSON.parse(cached)
+        if (typeof s.sent === 'number') setSent(s.sent)
+        if (typeof s.failed === 'number') setFailed(s.failed)
+        if (typeof s.secondsRemaining === 'number') setSecondsRemaining(s.secondsRemaining)
+        if (typeof s.total === 'number') setTotalOverride(s.total)
+        if (typeof s.running === 'boolean') setRunning(s.running)
+      }
+    } catch {}
+    ;(async () => {
+      try {
+        const r = await fetch('/api/status')
+        if (!r.ok) return
+        const j = await r.json()
+        setSent(j.sent || 0)
+        setFailed(j.failed || 0)
+        setSecondsRemaining(j.secondsRemaining || 0)
+        if (typeof j.total === 'number') setTotalOverride(j.total)
+        setRunning(!!j.running)
+      } catch {}
+    })()
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -257,7 +316,13 @@ export default function App() {
               </div>
 
               <div className="mb-4">
-                <label className="mb-1 block text-sm font-medium">AI System Prompt</label>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="block text-sm font-medium">AI System Prompt</label>
+                  <div className="flex items-center gap-2">
+                    {promptSaved && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
+                    <button onClick={savePrompt} className="inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:hover:bg-gray-900">Save</button>
+                  </div>
+                </div>
                 <textarea
                   className="min-h-[160px] w-full resize-y rounded-md border border-gray-300 bg-white p-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-gray-700 dark:bg-gray-950"
                   value={systemPrompt}
